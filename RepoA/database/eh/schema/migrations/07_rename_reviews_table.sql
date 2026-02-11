@@ -1,0 +1,1 @@
+ALTER TABLE reviews RENAME TO product_reviews;

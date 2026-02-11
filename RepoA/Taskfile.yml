@@ -1,0 +1,143 @@
+version: '3'
+
+vars:
+  CLIENT: '{{.CLIENT | default "eh"}}'
+  ENV: '{{.ENV | default "dev"}}'
+  TARGET: '{{.TARGET | default "stg"}}'            # ✅ Only used for diff
+  REF_ENV: '{{.REF_ENV | default "dev"}}'          # ✅ Source environment for diff
+  TYPE: '{{.TYPE | default "schema"}}'
+  REPO: '{{.REPO | default "RepoA"}}'
+  COUNT: '{{.COUNT | default "1"}}'
+
+tasks:
+  # -----------------------------
+  # Safety check before rollback
+  # -----------------------------
+  check-safe:
+    desc: Ensure rollback belongs to correct repo
+    cmds:
+      - |
+        cd ./database/{{.CLIENT}}/{{.TYPE}} && (
+          echo "📜 Generating Liquibase history..."
+          liquibase --defaults-file=liquibase-{{.ENV}}.properties history > temp_history.txt
+          python ../../../database/check-rollback-safety.py temp_history.txt {{.COUNT}}
+        )
+
+  # -----------------------------
+  # Liquibase validate
+  # -----------------------------
+  liquibase-validate:
+    desc: Run Liquibase validations
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties validate
+
+  # -----------------------------
+  # Liquibase migrate
+  # -----------------------------
+  liquibase-migrate:
+    desc: Run Liquibase migrations
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties update
+
+  # -----------------------------
+  # Liquibase rollback
+  # -----------------------------
+  liquibase-rollback:
+    desc: Rollback safely with repo verification
+    deps: [check-safe]
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties rollbackCount {{.COUNT}}
+
+  # -----------------------------
+  # Liquibase clean
+  # -----------------------------
+  liquibase-clean:
+    desc: Drop all objects (use with caution)
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties dropAll
+
+  # -----------------------------
+  # Liquibase history
+  # -----------------------------
+  liquibase-history:
+    desc: Show Liquibase history for the given environment
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties history
+
+  # -----------------------------
+  # Liquibase diff (drift detection)
+  # -----------------------------
+  liquibase-diff:
+    desc: Run Liquibase diff between two environments (REF_ENV → TARGET)
+    cmds:
+      - |
+        cd ./database/{{.CLIENT}}/{{.TYPE}} && (
+          echo "🔍 Running Liquibase diff between {{.REF_ENV}} → {{.TARGET}}..."
+          liquibase \
+            --defaults-file=liquibase-{{.TARGET}}.properties \
+            diff \
+            --reference-url=jdbc:sqlite:../../../../databases/{{.CLIENT}}/{{.REF_ENV}}.db \
+            --url=jdbc:sqlite:../../../../databases/{{.CLIENT}}/{{.TARGET}}.db
+        )
+
+  # -----------------------------
+  # Liquibase sync (schema alignment)
+  # -----------------------------
+  # liquibase-sync:
+  #   desc: Generate and apply diff changelog to sync REF_ENV → TARGET
+  #   cmds:
+  #     - |
+  #       cd ./database/{{.CLIENT}}/{{.TYPE}} && (
+  #         echo "⚙️ Generating changelog to sync {{.REF_ENV}} → {{.TARGET}}..."
+  #         liquibase \
+  #           --defaults-file=liquibase-{{.TARGET}}.properties \
+  #           diffChangeLog \
+  #           --reference-url=jdbc:sqlite:../../../../databases/{{.CLIENT}}/{{.REF_ENV}}.db \
+  #           --url=jdbc:sqlite:../../../../databases/{{.CLIENT}}/{{.TARGET}}.db \
+  #           --changeLogFile=../../../../generated/diff/{{.CLIENT}}_{{.REF_ENV}}_to_{{.TARGET}}.xml
+
+  #         echo "🛠 Applying changelog to {{.TARGET}}..."
+  #         liquibase \
+  #           --defaults-file=liquibase-{{.TARGET}}.properties \
+  #           update \
+  #           --changeLogFile=../../../../generated/diff/{{.CLIENT}}_{{.REF_ENV}}_to_{{.TARGET}}.xml
+  #       )
+
+  # liquibase-sync:
+  #   desc: Generate and apply diff changelog to sync REF_ENV → TARGET
+  #   cmds:
+  #     - |
+  #       cd ./database/{{.CLIENT}}/{{.TYPE}} && (
+  #         echo "⚙️ Generating changelog to sync {{.REF_ENV}} → {{.TARGET}}..."
+  #         liquibase \
+  #           --defaults-file=liquibase-{{.TARGET}}.properties \
+  #           diffChangeLog \
+  #           --reference-url=jdbc:sqlite:../../../../databases/{{.CLIENT}}/{{.REF_ENV}}.db \
+  #           --url=jdbc:sqlite:../../../../databases/{{.CLIENT}}/{{.TARGET}}.db \
+  #           --changeLogFile=../../../../generated/diff/{{.CLIENT}}_{{.REF_ENV}}_to_{{.TARGET}}.xml
+
+  #         echo "🛠 Fixing missing constraint names..."
+  #         python ../../fix_empty_fk_names.py ../../../../generated/diff/{{.CLIENT}}_{{.REF_ENV}}_to_{{.TARGET}}.xml
+
+
+  #         echo "🛠 Applying changelog to {{.TARGET}}..."
+  #         liquibase \
+  #           --defaults-file=liquibase-{{.TARGET}}.properties \
+  #           update \
+  #           --changeLogFile=../../../../generated/diff/{{.CLIENT}}_{{.REF_ENV}}_to_{{.TARGET}}.xml
+  #       )
+  liquibase-sync:
+  desc: Sync changes from SOURCE_ENV to TARGET_ENV
+  cmds:
+    - |
+      liquibase \
+        --changeLogFile=diff/{{.CLIENT}}_{{.SOURCE_ENV}}_to_{{.TARGET_ENV}}.xml \
+        diffChangeLog \
+        --reference-url=jdbc:sqlite:./{{.CLIENT}}/{{.SOURCE_ENV}}.db \
+        --url=jdbc:sqlite:./{{.CLIENT}}/{{.TARGET_ENV}}.db
+      
+      liquibase \
+        --changeLogFile=diff/{{.CLIENT}}_{{.SOURCE_ENV}}_to_{{.TARGET_ENV}}.xml \
+        --url=jdbc:sqlite:./{{.CLIENT}}/{{.TARGET_ENV}}.db \
+        update
+

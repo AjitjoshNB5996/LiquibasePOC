@@ -1,0 +1,1 @@
+INSERT INTO product_reviews (user_id, product_id, rating, comment) VALUES (1, 2, 3, 'Average quality.');

@@ -1,0 +1,65 @@
+version: '3'
+
+vars:
+  CLIENT: '{{.CLIENT | default "eh"}}'
+  SOURCE_ENV: '{{.SOURCE_ENV | default "prod"}}'
+  TARGET_ENV: '{{.TARGET_ENV | default "stg"}}'
+  TYPE: '{{.TYPE | default "schema"}}'
+  DIFF_DIR: '{{.DIFF_DIR | default "generated/diff"}}'
+  DB_ROOT: '{{.DB_ROOT | default "./"}}'
+  CHANGELOG_FILE: '{{.CHANGELOG_FILE | default "{{.DIFF_DIR}}/{{.CLIENT}}_{{.SOURCE_ENV}}_to_{{.TARGET_ENV}}.xml"}}'
+
+tasks:
+  liquibase-sync:
+    desc: Generate diff changelog from SOURCE_ENV → TARGET_ENV, fix FK names, and apply to TARGET
+    cmds:
+      - |
+        mkdir -p {{.DIFF_DIR}} || true
+        CHANGELOG={{.DIFF_DIR}}/{{.CLIENT}}_{{.SOURCE_ENV}}_to_{{.TARGET_ENV}}.xml
+        echo "🔁 Generating changelog $CHANGELOG"
+        liquibase \
+          diffChangeLog \
+          --reference-url=jdbc:sqlite:{{.DB_ROOT}}{{.CLIENT}}/{{.SOURCE_ENV}}.db \
+          --url=jdbc:sqlite:{{.DB_ROOT}}{{.CLIENT}}/{{.TARGET_ENV}}.db \
+          --changeLogFile=$CHANGELOG
+
+        if [ -f "$CHANGELOG" ]; then
+          echo "🔧 Post-processing $CHANGELOG to inject missing FK names"
+          python ./scripts/fix_fk_names.py "$CHANGELOG"
+        else
+          echo "⚠️  Changelog not found: $CHANGELOG"
+          exit 1
+        fi
+
+        echo "🛠 Applying changelog to {{.TARGET_ENV}}"
+        liquibase \
+          --url=jdbc:sqlite:{{.DB_ROOT}}{{.CLIENT}}/{{.TARGET_ENV}}.db \
+          update \
+          --changeLogFile=$CHANGELOG
+
+  liquibase-sync-dryrun:
+    desc: Generate diff changelog only (no update)
+    cmds:
+      - |
+        mkdir -p {{.DIFF_DIR}} || true
+        echo "🔍 Generating changelog (dry-run)"
+        CHANGELOG={{.DIFF_DIR}}/{{.CLIENT}}_{{.SOURCE_ENV}}_to_{{.TARGET_ENV}}.xml
+        liquibase \
+          diffChangeLog \
+          --reference-url=jdbc:sqlite:{{.DB_ROOT}}{{.CLIENT}}/{{.SOURCE_ENV}}.db \
+          --url=jdbc:sqlite:{{.DB_ROOT}}{{.CLIENT}}/{{.TARGET_ENV}}.db \
+          --changeLogFile=$CHANGELOG
+
+        if [ -f "$CHANGELOG" ]; then
+          echo "🔧 Post-processing $CHANGELOG to inject missing FK names (dry-run)"
+          python ./scripts/fix_fk_names.py "$CHANGELOG"
+        else
+          echo "⚠️  Changelog not found: $CHANGELOG"
+          exit 1
+        fi
+
+  liquibase-sync-apply-file:
+    desc: Apply an existing changelog file to target environment
+    cmds:
+      - |
+        liquibase --url=jdbc:sqlite:{{.DB_ROOT}}{{.CLIENT}}/{{.TARGET_ENV}}.db update --changeLogFile={{.CHANGELOG_FILE}}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="1" author="RepoA">
+        <sqlFile path="migrations/01_create_users.sql"/>
+        <rollback>
+            <sqlFile path="rollback/01_drop_users.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2" author="RepoA">
+        <sqlFile path="migrations/02_create_orders.sql"/>
+        <rollback>
+            <sqlFile path="rollback/02_drop_orders.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="3" author="RepoA">
+        <sqlFile path="migrations/03_create_products.sql"/>
+        <rollback>
+            <sqlFile path="rollback/03_drop_products.sql"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

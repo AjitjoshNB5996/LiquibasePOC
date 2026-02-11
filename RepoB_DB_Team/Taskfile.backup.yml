@@ -1,0 +1,41 @@
+version: '3'
+
+vars:
+  CLIENT: '{{.CLIENT | default "eh"}}'
+  ENV: '{{.ENV | default "dev"}}'
+  TYPE: '{{.TYPE | default "schema"}}'
+  COUNT: '{{.COUNT | default "1"}}'
+  REPO: '{{.REPO | default "RepoA"}}'
+
+tasks:
+  liquibase-validate:
+    desc: Run Liquibase validations
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties validate
+
+  liquibase-migrate:
+    desc: Run Liquibase migrations
+    deps: [check-safe]
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties update
+
+  liquibase-history:
+    desc: Get Liquibase history
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase --defaults-file=liquibase-{{.ENV}}.properties history
+
+  check-safe:
+    desc: Ensure latest DB state before rollback/migrate
+    cmds:
+      - powershell.exe -ExecutionPolicy Bypass -File ./database/check-rollback-safety.ps1 ./database/{{.CLIENT}}/{{.TYPE}}/liquibase-{{.ENV}}.properties {{.REPO}} {{.COUNT}}
+
+  liquibase-rollback:
+    desc: Rollback Liquibase changes (safely)
+    deps: [check-safe]
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties rollbackCount {{.COUNT}}
+
+  liquibase-clean:
+    desc: Drop all objects
+    cmds:
+      - cd ./database/{{.CLIENT}}/schema && liquibase --defaults-file=liquibase-{{.ENV}}.properties dropAll

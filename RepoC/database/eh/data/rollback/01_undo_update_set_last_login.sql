@@ -1,0 +1,1 @@
+UPDATE users SET last_login = null WHERE id = 1;

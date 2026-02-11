@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="1" author="RepoA">
+        <sqlFile path="migrations/04_alter_products_add_column.sql"/>
+        <rollback>
+            <sqlFile path="rollback/04_drop_column.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2" author="RepoA">
+        <sqlFile path="migrations/05_create_index_users_email.sql"/>
+        <rollback>
+            <sqlFile path="rollback/05_drop_index_users_email.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="3" author="RepoA">
+        <sqlFile path="migrations/06_create_reviews.sql"/>
+        <rollback>
+            <sqlFile path="rollback/06_drop_reviews.sql"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

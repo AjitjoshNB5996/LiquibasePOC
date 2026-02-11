@@ -1,0 +1,1 @@
+DELETE FROM product_reviews WHERE user_id = 1 AND product_id = 2 AND rating = 3 AND comment = 'Average quality.';

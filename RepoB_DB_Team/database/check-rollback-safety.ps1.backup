@@ -1,0 +1,82 @@
+<#
+.SYNOPSIS
+    Liquibase rollback/migration safety script (Windows PowerShell)
+.DESCRIPTION
+    Ensures that the database is up-to-date before rollback/migrate,
+    and that rollbackCount does not exceed changes applied by this repo.
+.PARAMETER PropFile
+    Path to Liquibase properties file
+.PARAMETER RepoName
+    Name of the repository (e.g., RepoA, RepoB)
+.PARAMETER RollbackCount
+    Optional. Number of changesets to rollback (default = 1)
+.EXAMPLE
+    .\check-rollback-safety.ps1 ./database/eh/schema/liquibase-dev.properties RepoA 2
+#>
+
+param(
+    [Parameter(Mandatory=$true)][string]$PropFile,
+    [Parameter(Mandatory=$true)][string]$RepoName,
+    [int]$RollbackCount = 1
+)
+
+# --- Helper Function ---
+function Exec-Liquibase {
+    param([string]$Args)
+    $LiquibasePath = "C:\Program Files\Liquibase\liquibase.bat"
+
+    if (-not (Test-Path $LiquibasePath)) {
+        Write-Error "❌ Liquibase not found at $LiquibasePath"
+        exit 1
+    }
+
+    # Execute Liquibase command
+    & "$LiquibasePath" $Args
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "❌ Liquibase command failed: $Args"
+        exit 1
+    }
+}
+
+Write-Host "🔍 [$RepoName] Checking rollback/migration safety using: $PropFile"
+
+# --- Step 1: Detect unapplied changesets ---
+Write-Host "▶ Running dry-run updateSQL..."
+try {
+    Exec-Liquibase " --defaults-file=`"$PropFile`" updateSQL > temp_updateSQL.txt"
+} catch {
+    Write-Error "❌ Liquibase updateSQL failed — aborting."
+    exit 1
+}
+
+$pendingCount = (Select-String -Path temp_updateSQL.txt -Pattern "UPDATE DATABASECHANGELOG").Count
+if ($pendingCount -gt 0) {
+    Write-Warning "⚠️ Detected $pendingCount unapplied changesets (possibly from other repos)."
+    Write-Warning "   Please apply pending migrations before rollback."
+    Remove-Item temp_updateSQL.txt
+    exit 1
+}
+
+Remove-Item temp_updateSQL.txt
+
+# --- Step 2: Count executed changesets for this repo ---
+Write-Host "▶ Checking executed changesets for [$RepoName]..."
+Exec-Liquibase " --defaults-file=`"$PropFile`" history > temp_history.txt"
+
+# Count lines containing either author or filename with repo name
+$executedRepoCount = (Select-String -Path temp_history.txt -Pattern "author:.*$RepoName|file:.*$RepoName" -SimpleMatch).Count
+Remove-Item temp_history.txt
+
+if ($executedRepoCount -eq 0) {
+    Write-Warning "ℹ️ No executed changesets found for [$RepoName]. Nothing to rollback."
+    exit 1
+}
+
+# --- Step 3: Validate rollback count ---
+if ($RollbackCount -gt $executedRepoCount) {
+    Write-Error "❌ Unsafe rollback: Requested $RollbackCount, but only $executedRepoCount executed changesets belong to [$RepoName]."
+    exit 1
+}
+
+Write-Host "✅ [$RepoName] Database state is up-to-date and rollback count ($RollbackCount) is safe."
+exit 0

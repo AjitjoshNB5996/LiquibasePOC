@@ -1,0 +1,2 @@
+DELETE FROM reviews WHERE user_id = 1 AND product_id = 1 AND rating = 5 AND comment = 'Excellent product!';
+DELETE FROM reviews WHERE user_id = 2 AND product_id = 2 AND rating = 4 AND comment = 'Works well.';

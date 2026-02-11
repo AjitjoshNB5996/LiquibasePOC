@@ -1,0 +1,1 @@
+UPDATE users SET last_login = '2025-10-14T17:00:00' WHERE id = 1;

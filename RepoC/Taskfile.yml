@@ -1,0 +1,63 @@
+version: '3'
+
+vars:
+  CLIENT: '{{.CLIENT | default "eh"}}'
+  ENV: '{{.ENV | default "dev"}}'
+  TYPE: '{{.TYPE | default "schema"}}'
+  REPO: '{{.REPO | default "RepoA"}}'
+  COUNT: '{{.COUNT | default "1"}}'
+
+tasks:
+  # -----------------------------
+  # Safety check before rollback
+  # -----------------------------
+  check-safe:
+    desc: Ensure rollback belongs to correct repo
+    cmds:
+      - |
+        cd ./database/{{.CLIENT}}/{{.TYPE}} && (
+          echo "📜 Generating Liquibase history..."
+          liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties history > temp_history.txt
+          python ../../../database/check-rollback-safety.py temp_history.txt {{.COUNT}}
+        )
+
+  # -----------------------------
+  # Liquibase validate
+  # -----------------------------
+  liquibase-validate:
+    desc: Run Liquibase validations
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties validate
+
+  # -----------------------------
+  # Liquibase migrate
+  # -----------------------------
+  liquibase-migrate:
+    desc: Run Liquibase migrations
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties update
+
+  # -----------------------------
+  # Liquibase rollback
+  # -----------------------------
+  liquibase-rollback:
+    desc: Rollback safely with repo verification
+    deps: [check-safe]
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties rollbackCount {{.COUNT}}
+
+  # -----------------------------
+  # Liquibase clean
+  # -----------------------------
+  liquibase-clean:
+    desc: Drop all objects (use with caution)
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties dropAll
+
+  # -----------------------------
+  # Liquibase history
+  # -----------------------------
+  liquibase-history:
+    desc: Show Liquibase history for the given environment
+    cmds:
+      - cd ./database/{{.CLIENT}}/{{.TYPE}} && liquibase.bat --defaults-file=liquibase-{{.ENV}}.properties history

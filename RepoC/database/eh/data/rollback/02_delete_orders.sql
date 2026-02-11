@@ -1,0 +1,1 @@
+DELETE FROM orders where user_id = 1 and order_date = '2025-10-14';
